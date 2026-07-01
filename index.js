@@ -47,4 +47,5 @@ builder.defineMetaHandler(async ({ type, id }) => {
     return { meta };
 });
 
-serveHTTP(builder.getInterface(), { port: 7000 });
+const PORT = process.env.PORT || 7000;
+serveHTTP(builder.getInterface(), { port: PORT });
