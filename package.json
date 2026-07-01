@@ -1,0 +1,13 @@
+{
+  "name": "nuvio-single-season",
+  "version": "1.0.0",
+  "description": "Nuvio/Stremio addon that merges all seasons of a series into one virtual season",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
+    "node-fetch": "^2.7.0"
+  }
+}
