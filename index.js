@@ -36,13 +36,20 @@ builder.defineMetaHandler(async ({ type, id }) => {
     });
 
     // 3) أعد بناء المصفوفة: كل شيء تحت "Season 1"، مع ترقيم تسلسلي جديد
-    meta.videos = sorted.map((ep, index) => ({
-        ...ep,
-        id: ep.id,                     // مهم: لا تغيّره، تستخدمه إضافات البث
-        season: 1,                     // كل الحلقات تحت موسم افتراضي واحد
-        episode: index + 1,            // ترقيم متسلسل جديد
-        title: `S${String(ep.season).padStart(2, "0")}E${String(ep.episode).padStart(2, "0")} • ${ep.title || ""}`,
-    }));
+    meta.videos = sorted.map((ep, index) => {
+        const newEpisode = index + 1;
+        const originalLabel = `S${String(ep.season).padStart(2, "0")}E${String(ep.episode).padStart(2, "0")}`;
+        return {
+            ...ep,
+            id: ep.id,                     // مهم: لا تغيّره، تستخدمه إضافات البث
+            season: 1,                     // كل الحلقات تحت موسم افتراضي واحد
+            episode: newEpisode,           // ترقيم متسلسل جديد يطابق النص
+            // النص يعرض الترقيم الجديد (متطابق مع S/E الفعلي)، مع ذكر الأصل بين قوسين للمرجعية
+            title: `S01E${String(newEpisode).padStart(2, "0")} • ${ep.title || ""} [${originalLabel}]`,
+            // صورة احتياطية لو الحلقة ما عندها thumbnail من المصدر
+            thumbnail: ep.thumbnail || meta.background || meta.poster || undefined,
+        };
+    });
 
     return { meta };
 });
