@@ -165,21 +165,32 @@ function structuralScore(fileInfo, subText, fileTokens) {
 }
 
 async function fetchFromOne(base, type, id, extraParams) {
+    const url = `${base}/subtitles/${type}/${encodeURIComponent(id)}${extraParams ? `/${extraParams}` : ""}.json`;
+    const debugEntry = { base, url, ok: false, httpStatus: null, count: 0, error: null };
     try {
-        const url = `${base}/subtitles/${type}/${encodeURIComponent(id)}${extraParams ? `/${extraParams}` : ""}.json`;
         const r = await fetch(url, { timeout: 8000 });
-        const j = await r.json();
-        return j.subtitles || [];
+        debugEntry.httpStatus = r.status;
+        const text = await r.text();
+        let j;
+        try {
+            j = JSON.parse(text);
+        } catch (parseErr) {
+            debugEntry.error = `JSON parse failed. Raw response (first 300 chars): ${text.slice(0, 300)}`;
+            return { subs: [], debug: debugEntry };
+        }
+        const subs = j.subtitles || [];
+        debugEntry.ok = true;
+        debugEntry.count = subs.length;
+        return { subs, debug: debugEntry };
     } catch (e) {
-        console.error(`Failed fetching from ${base}:`, e.message);
-        return [];
+        debugEntry.error = e.message;
+        return { subs: [], debug: debugEntry };
     }
 }
 
 builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
     if (SUBTITLES_BASES.length === 0) {
-        console.error("SUBTITLES_BASES env var not set");
-        return { subtitles: [] };
+        return { subtitles: [], _debug: { error: "SUBTITLES_BASES env var not set" } };
     }
 
     const extraParams = extra
@@ -189,7 +200,8 @@ builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
         : "";
 
     const results = await Promise.all(SUBTITLES_BASES.map((base) => fetchFromOne(base, type, id, extraParams)));
-    let subtitles = results.flat();
+    let subtitles = results.flatMap((r) => r.subs);
+    const debugInfo = results.map((r) => r.debug);
 
     const filename = extra && (extra.filename || extra.videoFilename || "");
     const videoHash = extra && extra.videoHash;
@@ -216,7 +228,8 @@ builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
         return { ...s, url: `${OWN_BASE_URL}/embed-font/${token}.ass` };
     });
 
-    return { subtitles };
+    // نضيف معلومات تشخيصية — Stremio/Nuvio يتجاهلونها، لكنها تظهر في أي اختبار JSON خام
+    return { subtitles, _debug: debugInfo };
 });
 
 // ================= سيرفر Express مخصص (إضافة + مسار تقديم الترجمة المعدّلة) =================
