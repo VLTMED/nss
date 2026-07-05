@@ -1,14 +1,15 @@
 {
-  "name": "nuvio-single-season",
-  "version": "1.0.0",
-  "description": "Nuvio/Stremio addon that merges all seasons of a series into one virtual season",
+  "name": "nuvio-subtitle-ranker",
+  "version": "4.0.0",
+  "description": "Stremio/Nuvio subtitle addon: merges multiple subtitle sources, ranks by structural match, and embeds a custom Arabic font via ASS",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "stremio-addon-sdk": "^1.6.10",
+    "express": "^5.2.1",
     "node-fetch": "^2.7.0",
-    "parse-torrent-title": "^3.0.1"
+    "parse-torrent-title": "^3.0.1",
+    "stremio-addon-sdk": "^1.6.10"
   }
 }
