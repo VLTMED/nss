@@ -1,14 +1,14 @@
 const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
 const fetch = require("node-fetch");
+const ptt = require("parse-torrent-title");
 
-// رابط إضافة الترجمة الحقيقية (بدون /manifest.json) — يُقرأ من متغير بيئة في Render
 const SUBTITLES_BASE = process.env.SUBTITLES_BASE;
 
 const manifest = {
     id: "org.example.subtitleranker",
-    version: "1.0.0",
+    version: "2.0.0",
     name: "Subtitle Match Ranker",
-    description: "يرتب نتائج الترجمة حسب مدى تطابقها مع اسم الملف/المصدر المشغّل فعليًا",
+    description: "يرتب نتائج الترجمة حسب مدى تطابقها البنيوي (جروب/دقة/مصدر/كودك) مع الملف المشغّل فعليًا",
     types: ["movie", "series"],
     catalogs: [],
     idPrefixes: ["tt"],
@@ -17,21 +17,60 @@ const manifest = {
 
 const builder = new addonBuilder(manifest);
 
+// نص احتياطي بسيط (Jaccard على الكلمات) يُستخدم فقط كفاصل عند التساوي
 function tokenize(text) {
-    if (!text) return [];
-    return text
-        .toLowerCase()
-        .replace(/[._\-\[\]()]/g, " ")
-        .split(/\s+/)
-        .filter((w) => w.length > 1);
+    if (!text) return new Set();
+    return new Set(
+        text
+            .toLowerCase()
+            .replace(/[._\-\[\]()]/g, " ")
+            .split(/\s+/)
+            .filter((w) => w.length > 1)
+    );
+}
+function jaccard(aTokens, bTokens) {
+    if (aTokens.size === 0 || bTokens.size === 0) return 0;
+    let inter = 0;
+    for (const t of aTokens) if (bTokens.has(t)) inter++;
+    const union = aTokens.size + bTokens.size - inter;
+    return union === 0 ? 0 : inter / union;
 }
 
-function matchScore(filenameTokens, subtitleText) {
-    const subTokens = new Set(tokenize(subtitleText));
+// درجة التطابق البنيوي الحقيقي بين معلومات الملف الفعلي ومعلومات الترجمة
+function structuralScore(fileInfo, subText, fileTokens) {
+    if (!subText) return 0;
+    const subInfo = ptt.parse(subText);
     let score = 0;
-    for (const t of filenameTokens) {
-        if (subTokens.has(t)) score++;
+
+    // Release Group: أقوى إشارة على إن الترجمة مسوّاة لنفس نسخة الملف
+    if (fileInfo.group && subInfo.group && fileInfo.group.toLowerCase() === subInfo.group.toLowerCase()) {
+        score += 50;
     }
+    // الدقة
+    if (fileInfo.resolution && subInfo.resolution && fileInfo.resolution === subInfo.resolution) {
+        score += 20;
+    }
+    // المصدر (BluRay/WEB-DL/HDTV...)
+    if (fileInfo.source && subInfo.source && fileInfo.source.toLowerCase() === subInfo.source.toLowerCase()) {
+        score += 15;
+    }
+    // الكودك
+    if (fileInfo.codec && subInfo.codec && fileInfo.codec.toLowerCase() === subInfo.codec.toLowerCase()) {
+        score += 10;
+    }
+    // تطابق الموسم/الحلقة (تأكيد إضافي، مو شرط لأن الفلترة الأساسية تمت مسبقًا بالـ id)
+    if (
+        fileInfo.season != null &&
+        fileInfo.episode != null &&
+        fileInfo.season === subInfo.season &&
+        fileInfo.episode === subInfo.episode
+    ) {
+        score += 10;
+    }
+
+    // فاصل نصي عام كإشارة إضافية خفيفة (Jaccard) عند تقارب النقاط
+    score += jaccard(fileTokens, tokenize(subText)) * 5;
+
     return score;
 }
 
@@ -62,17 +101,20 @@ builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
     }
 
     const filename = extra && (extra.filename || extra.videoFilename || "");
-    const filenameTokens = tokenize(filename);
+    const videoHash = extra && extra.videoHash;
 
-    if (filenameTokens.length > 0) {
+    if (filename) {
+        const fileInfo = ptt.parse(filename);
+        const fileTokens = tokenize(filename);
+
         subtitles = subtitles
-            .map((s) => ({
-                ...s,
-                _score: matchScore(
-                    filenameTokens,
-                    (s.lang || "") + " " + (s.id || "") + " " + (s.SubFileName || s.release || "")
-                ),
-            }))
+            .map((s) => {
+                // مطابقة Hash حقيقية = مزامنة مضمونة، تتخطى كل شي
+                const hashMatch = videoHash && s.SubHash && s.SubHash === videoHash;
+                const subText = s.SubFileName || s.release || s.MovieReleaseName || s.id || "";
+                const score = hashMatch ? 100000 : structuralScore(fileInfo, subText, fileTokens);
+                return { ...s, _score: score };
+            })
             .sort((a, b) => b._score - a._score)
             .map(({ _score, ...rest }) => rest);
     }
@@ -82,3 +124,4 @@ builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
 
 const PORT = process.env.PORT || 7000;
 serveHTTP(builder.getInterface(), { port: PORT });
+
