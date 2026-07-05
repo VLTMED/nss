@@ -1,13 +1,12 @@
 {
   "name": "nuvio-subtitle-ranker",
-  "version": "4.0.0",
-  "description": "Stremio/Nuvio subtitle addon: merges multiple subtitle sources, ranks by structural match, and embeds a custom Arabic font via ASS",
+  "version": "5.0.0",
+  "description": "Stremio/Nuvio subtitle addon: merges multiple subtitle sources and ranks results by structural match with the played file",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^5.2.1",
     "node-fetch": "^2.7.0",
     "parse-torrent-title": "^3.0.1",
     "stremio-addon-sdk": "^1.6.10"
