@@ -4,7 +4,6 @@ const fetch = require("node-fetch");
 const ptt = require("parse-torrent-title");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 
 // قائمة روابط إضافات الترجمة (بدون /manifest.json)، مفصولة بفاصلة
 const SUBTITLES_BASES = (process.env.SUBTITLES_BASES || "")
@@ -21,12 +20,13 @@ const FONT_BUFFER = fs.readFileSync(FONT_FILE_PATH);
 const OWN_BASE_URL =
     process.env.RENDER_EXTERNAL_URL || process.env.OWN_BASE_URL || `http://localhost:${process.env.PORT || 7000}`;
 
-// تخزين مؤقت بالذاكرة: token -> رابط الترجمة الأصلي
-const tokenStore = new Map();
-function tokenFor(url) {
-    const token = crypto.createHash("sha256").update(url).digest("hex").slice(0, 20);
-    tokenStore.set(token, url);
-    return token;
+// ترميز/فك ترميز الرابط الأصلي مباشرة داخل الرابط نفسه (Base64 URL-safe)
+// لا نعتمد على ذاكرة السيرفر إطلاقًا، فيستمر يعمل حتى بعد أي إعادة تشغيل
+function encodeUrlToken(url) {
+    return Buffer.from(url, "utf8").toString("base64url");
+}
+function decodeUrlToken(token) {
+    return Buffer.from(token, "base64url").toString("utf8");
 }
 
 // ---------- ترميز الخط بصيغة ASS embedded fonts ----------
@@ -224,7 +224,7 @@ builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
     // نبدّل كل رابط ترجمة برابط عندنا يقدّم نسخة ASS فيها الخط مضمّن
     subtitles = subtitles.map((s) => {
         if (!s.url) return s;
-        const token = tokenFor(s.url);
+        const token = encodeUrlToken(s.url);
         return { ...s, url: `${OWN_BASE_URL}/embed-font/${token}.ass` };
     });
 
@@ -237,8 +237,12 @@ const app = express();
 app.use(getRouter(builder.getInterface()));
 
 app.get("/embed-font/:token.ass", async (req, res) => {
-    const originalUrl = tokenStore.get(req.params.token);
-    if (!originalUrl) return res.status(404).send("Not found");
+    let originalUrl;
+    try {
+        originalUrl = decodeUrlToken(req.params.token);
+    } catch (e) {
+        return res.status(400).send("Invalid token");
+    }
 
     try {
         const r = await fetch(originalUrl);
