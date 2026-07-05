@@ -9,6 +9,6 @@
   "dependencies": {
     "stremio-addon-sdk": "^1.6.10",
     "node-fetch": "^2.7.0",
-    "parse-torrent-title": "^4.2.0"
+    "parse-torrent-title": "^3.0.1"
   }
 }
